@@ -1,37 +1,49 @@
 #include "ESP32CAN.h"
 
-ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t baud) {
-    /* initialize configuration structures */
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, TWAI_MODE_NORMAL);
-    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+/*TODO: add details constructor and have current constructor just call it with defaults*/
 
-    twai_timing_config_t t_config;
 
-    switch (baud) {
-        case ESP32CAN_SPEED_100KBPS:
-            t_config = TWAI_TIMING_CONFIG_100KBITS();
-            break;
-        case ESP32CAN_SPEED_125KBPS:
-            t_config = TWAI_TIMING_CONFIG_125KBITS();
-            break;
-        case ESP32CAN_SPEED_250KBPS:
-            t_config = TWAI_TIMING_CONFIG_250KBITS();
-            break;
-        case ESP32CAN_SPEED_500KBPS:
-            t_config = TWAI_TIMING_CONFIG_500KBITS();
-            break;
-        case ESP32CAN_SPEED_800KBPS:
-            t_config = TWAI_TIMING_CONFIG_800KBITS();
-            break;
-        case ESP32CAN_SPEED_1MBPS:
-            t_config = TWAI_TIMING_CONFIG_1MBITS();
-            break;
-        default:
-            debugPrintln("TWAI: undefined buad rate");
-            return ESP32CAN_NOK;
-            break;
-    }
+/* Constructor to start CAN with defaults. */
+ESP32CAN_status_t ESP32CAN::CANInit(){
+    return startCANBus();
+}
 
+/* Constuctor for loading all defaults but changing the bus spped. */
+ESP32CAN_status_t ESP32CAN::CANInit(ESP32CAN_timing_t busSpeed){
+    ESP32CAN_status_t ret = ESP32CAN_OK;
+
+    if (setBusSpeed(busSpeed)){
+        ret = startCANBus();
+    }else ret = ESP32CAN_NOK;
+    return ret;
+}
+
+/* Overload simple constructor. Most programs will probably just use this. */
+ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed){
+    return CANInit(tx_pin, rx_pin, speed, TWAI_MODE_NORMAL);
+}
+
+/*Overload detailed constructor. Allows more control over TWAI (CAN) initialization parameters. 
+  
+  Mode paramter details from SDK:
+    TWAI_MODE_NORMAL           < Normal operating mode where TWAI controller can send/receive/acknowledge messages 
+    TWAI_MODE_NO_ACK           < Transmission does not require acknowledgment. Use this mode for self testing 
+    TWAI_MODE_LISTEN_ONLY      < The TWAI controller will not influence the bus (No transmissions or acknowledgments) but can receive messages
+ */
+
+ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed, twai_mode_t mode) {
+ 
+    ESP32CAN_status_t ret = ESP32CAN_OK;
+
+    if (setBusSpeed(speed)){
+        g_config = TWAI_GENERAL_CONFIG_DEFAULT(tx_pin, rx_pin, mode);
+        ret = startCANBus();
+    }else ret = ESP32CAN_NOK;
+    return ret;
+}
+
+
+ESP32CAN_status_t ESP32CAN::startCANBus(){
     /* install TWAI driver */
     switch (twai_driver_install(&g_config, &t_config, &f_config)) {
         case ESP_OK:
@@ -104,6 +116,39 @@ ESP32CAN_status_t ESP32CAN::CANStop() {
 
     return ESP32CAN_OK;
 }
+
+ESP32CAN_status_t ESP32CAN::setBusSpeed( ESP32CAN_timing_t speed){
+    ESP32CAN_status_t ret = ESP32CAN_OK;
+
+    switch (speed) {
+        case ESP32CAN_SPEED_100KBPS:
+            t_config = TWAI_TIMING_CONFIG_100KBITS();
+            break;
+        case ESP32CAN_SPEED_125KBPS:
+            t_config = TWAI_TIMING_CONFIG_125KBITS();
+            break;
+        case ESP32CAN_SPEED_250KBPS:
+            t_config = TWAI_TIMING_CONFIG_250KBITS();
+            break;
+        case ESP32CAN_SPEED_500KBPS:
+            t_config = TWAI_TIMING_CONFIG_500KBITS();
+            break;
+        case ESP32CAN_SPEED_800KBPS:
+            t_config = TWAI_TIMING_CONFIG_800KBITS();
+            break;
+        case ESP32CAN_SPEED_1MBPS:
+            t_config = TWAI_TIMING_CONFIG_1MBITS();
+            break;
+        default:
+            debugPrintln("TWAI: undefined buad rate");
+            ret = ESP32CAN_NOK;
+            break;
+    }
+    return ret;
+}
+
+
+
 
 ESP32CAN_status_t ESP32CAN::CANWriteFrame(const twai_message_t* p_frame) {
     /* queue message for transmission */
