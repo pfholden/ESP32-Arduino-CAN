@@ -55,9 +55,11 @@ class ESP32CAN {
         twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_5, GPIO_NUM_4, TWAI_MODE_NORMAL);
         twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
         twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
+        twai_status_info_t status_info;
         
         ESP32CAN_status_t setBusSpeed(ESP32CAN_timing_t speed);
         ESP32CAN_status_t startCANBus();
+        ESP32CAN_status_t loadCANStatus();
 
 };
 

@@ -3,7 +3,7 @@
 /*TODO: add details constructor and have current constructor just call it with defaults*/
 
 
-/* Constructor to start CAN with defaults. */
+/* Init method to start CAN with defaults. */
 ESP32CAN_status_t ESP32CAN::CANInit(){
     return startCANBus();
 }
@@ -18,12 +18,12 @@ ESP32CAN_status_t ESP32CAN::CANInit(ESP32CAN_timing_t busSpeed){
     return ret;
 }
 
-/* Overload simple constructor. Most programs will probably just use this. */
+/* Overload simple init method. Most programs will probably just use this. */
 ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed){
     return CANInit(tx_pin, rx_pin, speed, TWAI_MODE_NORMAL);
 }
 
-/*Overload detailed constructor. Allows more control over TWAI (CAN) initialization parameters. 
+/*Overload detailed init method. Allows more control over TWAI (CAN) initialization parameters. 
   
   Mode paramter details from SDK:
     TWAI_MODE_NORMAL           < Normal operating mode where TWAI controller can send/receive/acknowledge messages 
@@ -147,7 +147,13 @@ ESP32CAN_status_t ESP32CAN::setBusSpeed( ESP32CAN_timing_t speed){
     return ret;
 }
 
+ESP32CAN_status_t ESP32CAN::loadCANStatus(){
+    ESP32CAN_status_t ret = ESP32CAN_OK;
 
+    if(twai_get_status_info(&status_info) != ESP_OK ) ret = ESP32CAN_NOK;
+   
+    return ret;
+}
 
 
 ESP32CAN_status_t ESP32CAN::CANWriteFrame(const twai_message_t* p_frame) {
