@@ -47,6 +47,16 @@ class ESP32CAN {
         ESP32CAN_status_t CANWriteFrame(const twai_message_t* p_frame);
         ESP32CAN_status_t CANReadFrame(twai_message_t* p_frame);
 
+        uint32_t getTxQueueDepth();         /**< Number of messages queued for transmission or awaiting transmission completion */
+        uint32_t getRxQueueDepth();         /**< Number of messages in RX queue waiting to be read */
+        uint32_t getTxErrCount();           /**< Current value of Transmit Error Counter */
+        uint32_t getRxErrCount();           /**< Current value of Receive Error Counter */
+        uint32_t getTxFailedCount();        /**< Number of messages that failed transmissions */
+        uint32_t getRxMissCount();          /**< Number of messages that were lost due to a full RX queue (or errata workaround if enabled) */
+        uint32_t getRxOverrunCount();       /**< Number of messages that were lost due to a RX FIFO overrun */
+        uint32_t getArbLostCount();         /**< Number of instances arbitration was lost */
+        uint32_t getBusErrCount();          /**< Number of instances a bus error has occurred */
+
         // int CANConfigFilter(const CAN_filter_t* p_filter);
 
     private:
