@@ -44,7 +44,8 @@ class ESP32CAN {
         ESP32CAN_status_t CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed);
         ESP32CAN_status_t CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed, twai_mode_t MODE);
         ESP32CAN_status_t CANStop();
-        ESP32CAN_status_t CANWriteFrame(const twai_message_t* p_frame);
+        ESP32CAN_status_t CANWriteFrame();
+        // ESP32CAN_status_t CANWriteFrame(const twai_message_t* p_frame);
         ESP32CAN_status_t CANReadFrame(twai_message_t* p_frame);
 
         uint32_t getTxQueueDepth();         /**< Number of messages queued for transmission or awaiting transmission completion */
@@ -57,6 +58,10 @@ class ESP32CAN {
         uint32_t getArbLostCount();         /**< Number of instances arbitration was lost */
         uint32_t getBusErrCount();          /**< Number of instances a bus error has occurred */
 
+        /* Task-safe setters for accessing CAN message to transmit*/
+        ESP32CAN_status_t setCANMsg(uint32_t msg_id, uint8_t data_length, uint8_t data_bytes[TWAI_FRAME_MAX_DLC] );
+        ESP32CAN_status_t setCANMsg(uint32_t msg_id, uint8_t extended, uint8_t data_length, uint8_t data_bytes[TWAI_FRAME_MAX_DLC] );
+        
         // int CANConfigFilter(const CAN_filter_t* p_filter);
 
     private:
@@ -66,6 +71,12 @@ class ESP32CAN {
         twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
         twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
         twai_status_info_t status_info;
+        twai_message_t tx_msg;
+        twai_message_t rx_msg;
+
+        /*Read write spinlocks to serialize access to these functions*/
+        portMUX_TYPE read_spinlock = portMUX_INITIALIZER_UNLOCKED;
+        portMUX_TYPE write_spinlock = portMUX_INITIALIZER_UNLOCKED;
         
         ESP32CAN_status_t setBusSpeed(ESP32CAN_timing_t speed);
         ESP32CAN_status_t startCANBus();
