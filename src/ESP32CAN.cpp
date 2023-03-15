@@ -1,12 +1,12 @@
 #include "ESP32CAN.h"
 
 /* Init method to start CAN with defaults. */
-ESP32CAN_status_t ESP32CAN::CANInit(){
+ESP32CAN_status_t ESP32CAN::initCan(){
     return startCANBus();
 }
 
 /* Initilizer for loading default conifg but changing the bus spped. */
-ESP32CAN_status_t ESP32CAN::CANInit(ESP32CAN_timing_t busSpeed){
+ESP32CAN_status_t ESP32CAN::initCan(ESP32CAN_timing_t busSpeed){
     ESP32CAN_status_t ret = ESP32CAN_OK;
 
     if (setBusSpeed(busSpeed)){
@@ -16,8 +16,8 @@ ESP32CAN_status_t ESP32CAN::CANInit(ESP32CAN_timing_t busSpeed){
 }
 
 /* Overload simple init method. Most programs will probably just use this. */
-ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed){
-    return CANInit(tx_pin, rx_pin, speed, TWAI_MODE_NORMAL);
+ESP32CAN_status_t ESP32CAN::initCAN(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed){
+    return initCAN(tx_pin, rx_pin, speed, TWAI_MODE_NORMAL);
 }
 
 /*Overload detailed init method. Allows more control over TWAI (CAN) initialization parameters. 
@@ -28,7 +28,7 @@ ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32C
     TWAI_MODE_LISTEN_ONLY      < The TWAI controller will not influence the bus (No transmissions or acknowledgments) but can receive messages
  */
 
-ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed, twai_mode_t mode) {
+ESP32CAN_status_t ESP32CAN::initCAN(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32CAN_timing_t speed, twai_mode_t mode) {
  
     ESP32CAN_status_t ret = ESP32CAN_OK;
 
@@ -42,7 +42,7 @@ ESP32CAN_status_t ESP32CAN::CANInit(gpio_num_t tx_pin, gpio_num_t rx_pin, ESP32C
 /* TODO: Need overload init method with all configuration options*/
 
 
-ESP32CAN_status_t ESP32CAN::CANStop() {
+ESP32CAN_status_t ESP32CAN::stopCAN() {
     /* stop the TWAI driver */
     switch (twai_stop()) {
         case ESP_OK:
@@ -74,85 +74,76 @@ ESP32CAN_status_t ESP32CAN::CANStop() {
     return ESP32CAN_OK;
 }
 
-/*TODO: Need setCANMsg to sync between possible tasks running. IE, setting data into message 
-        in one task and another task simply writing the message out*/
 
+/* TODO: Add abibity to send remote frames*/
+/* Set standard CAN message */
 
 ESP32CAN_status_t ESP32CAN::setCANMsg(uint32_t msg_id, uint8_t data_length, 
                                         uint8_t data_bytes[TWAI_FRAME_MAX_DLC] ){
-   setCANMsg(msg_id, 0, data_length, data_bytes);
+   return setCANMsg(msg_id, 0, data_length, data_bytes);
 }
 
-/* TODO: Add abibity to send remote frames*/
+/* Set extended CAN msg ID if extended = 1; set standard msg ID if extended = 0 */
 ESP32CAN_status_t ESP32CAN::setCANMsg(uint32_t msg_id, uint8_t extended, uint8_t data_length, 
                                         uint8_t data_bytes[TWAI_FRAME_MAX_DLC] ){
     ESP32CAN_status_t return_flag = ESP32CAN_NOK;
-        
+
+    /* If msg_id not within correct range for type of msg or data length code not correct
+          simply return the preset "not OK" flag value. */   
     if ((extended && msg_id <= 0x1FFFFFFF) || (!extended && msg_id <= 0x7FF)){  /*Extended msg. 29 bit header */
         if (data_length <= TWAI_FRAME_MAX_DLC){
-            /* Put spinlock code here. */
-            taskENTER_CRITICAL(&write_spinlock);
-            tx_msg.identifier = msg_id;
-            tx_msg.extd = extended;
-            tx_msg.data_length_code = data_length;
+            /* Lock tx_msg before modifying */
+            if ( xSemaphoreTake(tx_msg_lock, portMAX_DELAY) == pdTRUE){
+                tx_msg.identifier = msg_id;
+                tx_msg.extd = extended;
+                tx_msg.data_length_code = data_length;
 
-            /* Copy data bytes into msg struct*/
-            for (uint8_t i=0;i<data_length;i++){
-                tx_msg.data[i]=data_bytes[i];
-            } 
-            return_flag = ESP32CAN_OK;
-            taskEXIT_CRITICAL(&write_spinlock);
+                /* Copy data bytes into msg struct*/
+                for (uint8_t i=0;i<data_length;i++){
+                    tx_msg.data[i]=data_bytes[i];
+                } 
+                return_flag = ESP32CAN_OK;
+                xSemaphoreGive(tx_msg_lock);
+            }
         }
     }
-    
     return return_flag;
 }
 
-ESP32CAN_status_t ESP32CAN::CANWriteFrame() {
-    twai_message_t tx_msg_copy;
+ESP32CAN_status_t ESP32CAN::sendCANMsg() {
+    ESP32CAN_status_t return_flag = ESP32CAN_NOK;
    
-    /* Lock TX msg, create copy of TX msg to send, release lock, and send copy. */
-    taskENTER_CRITICAL(&write_spinlock);
-    tx_msg_copy.flags = tx_msg.flags;
-    tx_msg_copy.identifier = tx_msg.identifier;
-    tx_msg_copy.data_length_code = tx_msg.data_length_code;
-    for (int i=0;i<tx_msg.data_length_code; i++){
-        tx_msg_copy.data[i] = tx_msg.data[i];
-    }
-    taskEXIT_CRITICAL(&write_spinlock);
+    /* Wait to lock TX msg for max delay and send it. */
+    if ( xSemaphoreTake(tx_msg_lock, portMAX_DELAY) == pdTRUE){
+   
+        /* queue message for transmission */
+        switch (twai_transmit(&tx_msg, pdMS_TO_TICKS(10))) {
+            case ESP_OK:
+                return_flag = ESP32CAN_OK;
+                break;
+            case ESP_ERR_INVALID_ARG:
+                debugPrintln("TWAI TX: ESP_ERR_INVALID_ARG");
+                break;
+            case ESP_ERR_TIMEOUT:
+                debugPrintln("TWAI TX: ESP_ERR_TIMEOUT");
+                break;
+            case ESP_FAIL:
+                debugPrintln("TWAI TX: ESP_FAIL");
+                break;
+            case ESP_ERR_INVALID_STATE:
+                debugPrintln("TWAI TX: ESP_ERR_INVALID_STATE");
+                break;
+            case ESP_ERR_NOT_SUPPORTED:
+                debugPrintln("TWAI TX: ESP_ERR_NOT_SUPPORTED");
+                break;
+            default:
+                debugPrintln("TWAI TX: unknow error");
+                break;
+        }
+        xSemaphoreGive(tx_msg_lock);
+    }                                    
 
-    /* queue message for transmission */
-    switch (twai_transmit(&tx_msg_copy, pdMS_TO_TICKS(10))) {
-        case ESP_OK:
-            break;
-        case ESP_ERR_INVALID_ARG:
-            debugPrintln("TWAI TX: ESP_ERR_INVALID_ARG");
-            return ESP32CAN_NOK;
-            break;
-        case ESP_ERR_TIMEOUT:
-            debugPrintln("TWAI TX: ESP_ERR_TIMEOUT");
-            return ESP32CAN_NOK;
-            break;
-        case ESP_FAIL:
-            debugPrintln("TWAI TX: ESP_FAIL");
-            return ESP32CAN_NOK;
-            break;
-        case ESP_ERR_INVALID_STATE:
-            debugPrintln("TWAI TX: ESP_ERR_INVALID_STATE");
-            return ESP32CAN_NOK;
-            break;
-        case ESP_ERR_NOT_SUPPORTED:
-            debugPrintln("TWAI TX: ESP_ERR_NOT_SUPPORTED");
-            return ESP32CAN_NOK;
-            break;
-        default:
-            debugPrintln("TWAI TX: unknow error");
-            return ESP32CAN_NOK;
-            break;
-    }
-    
-
-    return ESP32CAN_OK;
+    return return_flag;
 }
 
 
@@ -190,29 +181,50 @@ ESP32CAN_status_t ESP32CAN::CANWriteFrame() {
 //     return ESP32CAN_OK;
 // }
 
-ESP32CAN_status_t ESP32CAN::CANReadFrame(twai_message_t* p_frame) {
-    switch (twai_receive(p_frame, pdMS_TO_TICKS(10))) {
-    case ESP_OK:
-        break;
-    case ESP_ERR_TIMEOUT:
-        debugPrintln("TWAI RX: ESP_ERR_TIMEOUT");
-        return ESP32CAN_NOK;
-        break;
-    case ESP_ERR_INVALID_ARG:
-        debugPrintln("TWAI RX: ESP_ERR_INVALID_ARG");
-        return ESP32CAN_NOK;
-        break;
-    case ESP_ERR_INVALID_STATE:
-        debugPrintln("TWAI RX: ESP_ERR_INVALID_STATE");
-        return ESP32CAN_NOK;
-        break;
-    default:
-        debugPrintln("TWAI RX: unknow error");
-        return ESP32CAN_NOK;
-        break;
+ESP32CAN_status_t ESP32CAN::readCANMsg(uint32_t* msg_id, uint8_t* can_flags, uint8_t* data_length, uint8_t* data_bytes){
+    ESP32CAN_status_t return_flag = ESP32CAN_NOK;
+
+    if ( readCANMsg(&rx_msg)){
+        if ( xSemaphoreTake(rx_msg_lock, portMAX_DELAY) == pdTRUE){ /* Lock CAN mesg struct while copying date out of it. */
+            *msg_id = rx_msg.identifier;
+            *can_flags = rx_msg.flags;
+            *data_length = rx_msg.data_length_code;
+            for (int i;i++;i<rx_msg.data_length_code){
+                *(data_bytes++) = rx_msg.data[i];
+            }
+            xSemaphoreGive(rx_msg_lock);
+            return_flag = ESP32CAN_OK;
+        }
+    }
+    return return_flag;
+}
+
+
+ESP32CAN_status_t ESP32CAN::readCANMsg(twai_message_t* rx_msg) {
+    ESP32CAN_status_t return_flag = ESP32CAN_NOK;
+
+    if ( xSemaphoreTake(rx_msg_lock, portMAX_DELAY) == pdTRUE){ /* Lock CAN mesg struct while copying date into it. */
+        switch (twai_receive(rx_msg, pdMS_TO_TICKS(10))) {
+            case ESP_OK:
+                return_flag = ESP32CAN_OK;
+                break;
+            case ESP_ERR_TIMEOUT:
+                debugPrintln("TWAI RX: ESP_ERR_TIMEOUT");
+                break;
+            case ESP_ERR_INVALID_ARG:
+                debugPrintln("TWAI RX: ESP_ERR_INVALID_ARG");
+                break;
+            case ESP_ERR_INVALID_STATE:
+                debugPrintln("TWAI RX: ESP_ERR_INVALID_STATE");
+                break;
+            default:
+                debugPrintln("TWAI RX: unknow error");
+                break;
+        }
+        xSemaphoreGive(rx_msg_lock);
     }
 
-    return ESP32CAN_OK;
+    return return_flag;
 }
 
 /**< Number of messages queued for transmission or awaiting transmission completion */
