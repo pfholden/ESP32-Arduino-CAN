@@ -189,7 +189,7 @@ ESP32CAN_status_t ESP32CAN::readCANMsg(uint32_t* msg_id, uint8_t* can_flags, uin
             *msg_id = rx_msg.identifier;
             *can_flags = rx_msg.flags;
             *data_length = rx_msg.data_length_code;
-            for (int i;i++;i<rx_msg.data_length_code){
+            for (int i;i<rx_msg.data_length_code;i++){
                 *(data_bytes++) = rx_msg.data[i];
             }
             xSemaphoreGive(rx_msg_lock);
@@ -334,6 +334,9 @@ ESP32CAN_status_t ESP32CAN::startCANBus(){
             return ESP32CAN_NOK;
             break;
     }
+
+    xSemaphoreGive(rx_msg_lock);
+    xSemaphoreGive(tx_msg_lock);
 
     return ESP32CAN_OK;
 }
