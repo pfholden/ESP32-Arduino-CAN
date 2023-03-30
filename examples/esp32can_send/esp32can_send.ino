@@ -10,32 +10,38 @@
 #include <Arduino.h>
 #include <ESP32CAN.h>
 
+
 void setup() {
   Serial.begin(115200);
   Serial.println("ESP32-Arduino-CAN Send Basic Demo");
 
-  /* initialize and start, use pin 5 as CAN_tx and pin 4 as CAN_rx, CAN bus is set to 500kbps */
-  ESP32Can.CANInit(GPIO_NUM_5, GPIO_NUM_4, ESP32CAN_SPEED_500KBPS);
+  /* initialize and start, use pin 5 as CAN_tx and pin 4 as CAN_rx, CAN bus is set to 125kbps */
+  ESP32Can.initCAN(GPIO_NUM_5, GPIO_NUM_4, ESP32CAN_SPEED_125KBPS, TWAI_MODE_NO_ACK);
 }
 
 void loop() {
-  twai_message_t tx_frame;
+  uint32_t msg_id = 0;
+  uint8_t dlc = 0;
+  uint8_t data_bytes[TWAI_FRAME_MAX_DLC];
   
-  tx_frame.extd = 0;              /* CAN ID is standard 11bit, for 29bit set to 1*/
-  tx_frame.data_length_code = 8;  /* send 8 bytes of data */
-  tx_frame.identifier = 0x123;    /* CAN id is 0x123 */
+  
+  dlc = 8;  /* send 8 bytes of data */
+  msg_id = 0x123;    /* CAN id is 0x123 */
 
   /* assemble the 8 bytes of data */
-  tx_frame.data[0] = 0xDE;
-  tx_frame.data[1] = 0xAD;
-  tx_frame.data[2] = 0xBE;
-  tx_frame.data[3] = 0xEF;
-  tx_frame.data[4] = 0xBA;
-  tx_frame.data[5] = 0x5E;
-  tx_frame.data[6] = 0xBA;
-  tx_frame.data[7] = 0x11;
+  data_bytes[0] = 0xDE;
+  data_bytes[1] = 0xAD;
+  data_bytes[2] = 0xBE;
+  data_bytes[3] = 0xEF;
+  data_bytes[4] = 0xBA;
+  data_bytes[5] = 0x5E;
+  data_bytes[6] = 0xBA;
+  data_bytes[7] = 0x11;
 
-  ESP32Can.CANWriteFrame(&tx_frame); /* send the CAN message */
+
+  ESP32Can.setCANMsg(msg_id, dlc, data_bytes); /* Configure standard CAN message. */
+
+  ESP32Can.sendCANMsg(); /* send the CAN message */
 
   Serial.println("CAN Frame Sent");
 

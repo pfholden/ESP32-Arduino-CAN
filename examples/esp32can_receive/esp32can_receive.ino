@@ -14,24 +14,29 @@ void setup() {
   Serial.begin(115200);
   Serial.println("ESP32-Arduino-CAN Receive Basic Demo");
 
-  /* initialize and start, use pin 5 as CAN_tx and pin 4 as CAN_rx, CAN bus is set to 500kbps */
-  ESP32Can.CANInit(GPIO_NUM_5, GPIO_NUM_4, ESP32CAN_SPEED_500KBPS);
+  /* Initialize and start, use pin 5 as CAN_tx and pin 4 as CAN_rx, CAN bus is set to 125kbps */
+  ESP32Can.initCAN(GPIO_NUM_5, GPIO_NUM_4, ESP32CAN_SPEED_125KBPS);
 }
 
 void loop() {
-  twai_message_t rx_frame;
+  uint32_t msg_id = 0;
+  uint8_t numOfDataBytes = 0;
+  uint8_t CAN_flags = 0;
+  uint8_t data_bytes[TWAI_FRAME_MAX_DLC];
   
-  if (ESP32CAN_OK == ESP32Can.CANReadFrame(&rx_frame)) {  /* only print when CAN message is received*/
-    Serial.print(rx_frame.identifier, HEX);               /* print the CAN ID*/
+  if (ESP32CAN_OK == ESP32Can.readCANMsg(&msg_id, &CAN_flags, &numOfDataBytes, data_bytes )) {  /* only print when CAN message is received*/
+    Serial.print(msg_id, HEX);               /* print the CAN ID*/
     Serial.print(" ");
-    Serial.print(rx_frame.data_length_code);              /* print number of bytes in data frame*/
+    Serial.print(numOfDataBytes);              /* print number of bytes in data frame*/
+    Serial.print(" ");
     
-    for (int i=0; i<rx_frame.data_length_code; i++) {     /* print the data frame*/
-      Serial.print(rx_frame.data[i], HEX);
+    for (int i=0; i<numOfDataBytes; i++) {     /* print the data frame*/
+      Serial.print(data_bytes[i], HEX);
     }
 
     Serial.println();
-  }
+  } else Serial.println("No message");
   
   delay(1000);
 }
+
