@@ -185,7 +185,7 @@ ESP32CAN_status_t ESP32CAN::readCANMsg(uint32_t* msg_id, uint8_t* can_flags, uin
     ESP32CAN_status_t return_flag = ESP32CAN_NOK;
 
     if ( readCANMsg(&rx_msg)){
-        if ( xSemaphoreTake(rx_msg_lock, portMAX_DELAY) == pdTRUE){ /* Lock CAN mesg struct while copying date out of it. */
+        if ( xSemaphoreTake(rx_msg_lock, portMAX_DELAY) == pdTRUE){ /* Lock CAN mesg struct while copying data out of it. */
             *msg_id = rx_msg.identifier;
             *can_flags = rx_msg.flags;
             *data_length = rx_msg.data_length_code;
@@ -203,7 +203,7 @@ ESP32CAN_status_t ESP32CAN::readCANMsg(uint32_t* msg_id, uint8_t* can_flags, uin
 ESP32CAN_status_t ESP32CAN::readCANMsg(twai_message_t* rx_msg) {
     ESP32CAN_status_t return_flag = ESP32CAN_NOK;
 
-    if ( xSemaphoreTake(rx_msg_lock, portMAX_DELAY) == pdTRUE){ /* Lock CAN mesg struct while copying date into it. */
+    if ( xSemaphoreTake(rx_msg_lock, portMAX_DELAY) == pdTRUE){ /* Lock CAN mesg struct while copying data into it. */
         switch (twai_receive(rx_msg, pdMS_TO_TICKS(10))) {
             case ESP_OK:
                 return_flag = ESP32CAN_OK;

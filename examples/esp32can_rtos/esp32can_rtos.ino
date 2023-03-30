@@ -21,7 +21,9 @@
 #define CAN_RX_RATE_ms      1000
 
 /* can frame to send */
-twai_message_t tx_frame;
+uint32_t msg_id = 0;
+uint8_t dlc = 0;
+uint8_t data_bytes[TWAI_FRAME_MAX_DLC];
 
 /* CAN RTOS callback functions */
 void canSend(void *pvParameters);
@@ -35,8 +37,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println("ESP32-Arduino-CAN RTOS Example");
 
-  /* initialize and start, use pin 5 as CAN_tx and pin 4 as CAN_rx, CAN bus is set to 500kbps */
-  ESP32Can.CANInit(GPIO_NUM_5, GPIO_NUM_4, ESP32CAN_SPEED_500KBPS);
+  /* initialize and start, use pin 5 as CAN_tx and pin 4 as CAN_rx, CAN bus is set to 125kbps */
+  ESP32Can.initCAN(GPIO_NUM_5, GPIO_NUM_4, ESP32CAN_SPEED_125KBPS);
 
   /* setup can send RTOS task */
   xTaskCreatePinnedToCore(canSend,         /* callback function */
@@ -58,19 +60,18 @@ void setup() {
 
 
   /* setup can send frame */
-  tx_frame.extd = 0;             /* standard 11bit ID */
-  tx_frame.identifier = 0x123;   /* CAN ID */
-  tx_frame.data_length_code = 8; /* 8 bytes of data */
+  msg_id = 0x123;   /* CAN ID */
+  dlc = 8; /* 8 bytes of data */
   for (int8_t i= 0; i<8; i++) {
-    tx_frame.data[i] = 0xFF;     /* pad frame with 0xFF */
+    data_bytes[i] = 0xFF;     /* pad frame with 0xFF */
   }
 }
 
 void loop() {
   /* place time in seconds into first two bytes of dataframe */
   uint16_t time = millis()/1000;
-  tx_frame.data[0] = highByte(time);
-  tx_frame.data[1] = lowByte(time);
+  data_bytes[0] = highByte(time);
+  data_bytes[1] = lowByte(time);
 
   delay(500);
 }
@@ -83,7 +84,8 @@ void canSend(void *pvParameters) {
   /* this task will run forever at frequency set above 
    * to stop this task from running call vTaskSuspend(canTxTask) in the main loop */
 	for (;;) {
-		ESP32Can.CANWriteFrame(&tx_frame);           /* send dataframe */
+		ESP32Can.setCANMsg(msg_id, dlc, data_bytes);    /*Setup the CAN message to be sent*/
+    ESP32Can.sendCANMsg();        /*Send the message */
 
 		vTaskDelayUntil(&xLastWakeTime, xFrequency); /* do something else until it is time to send again */
         /* the above delay function was used since it specifies an absolute wake time. 
@@ -93,16 +95,19 @@ void canSend(void *pvParameters) {
 
 void canReceive(void *pvParameters) {
 	const TickType_t xDelay = CAN_RX_RATE_ms / portTICK_PERIOD_MS;
-	twai_message_t rx_frame;
+	uint32_t msg_id = 0;
+  uint8_t numOfDataBytes = 0;
+  uint8_t CAN_flags = 0;
+  uint8_t data_bytes[TWAI_FRAME_MAX_DLC];
 
 	for (;;) {
-    if (ESP32CAN_OK == ESP32Can.CANReadFrame(&rx_frame)) {  /* only print when CAN message is received*/
-      Serial.print(rx_frame.identifier, HEX);               /* print the CAN ID*/
+    if (ESP32CAN_OK == ESP32Can.readCANMsg(&msg_id, &CAN_flags, &numOfDataBytes, data_bytes)) {  /* only print when CAN message is received*/
+      Serial.print(msg_id, HEX);               /* print the CAN ID*/
       Serial.print(" ");
-      Serial.print(rx_frame.data_length_code);              /* print number of bytes in data frame*/
+      Serial.print(numOfDataBytes);              /* print number of bytes in data frame*/
       
-      for (int i=0; i<rx_frame.data_length_code; i++) {     /* print the data frame*/
-        Serial.print(rx_frame.data[i], HEX);
+      for (int i=0; i<numOfDataBytes; i++) {     /* print the data frame*/
+        Serial.print(data_bytes[i], HEX);
       }
 
       Serial.println();
